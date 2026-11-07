@@ -35,6 +35,13 @@ export function AccountMenu({
   const account = useAccount(state => state)
   const colorScheme = useTheme(snapshot => snapshot.active.colorScheme)
   const signedIn = account.view?.status === 'credential-stored'
+  // The SSO gateway stamps the signed-in identity into every page it serves.
+  const sso = typeof window !== 'undefined'
+    ? (window as Window & { __DSH_SSO__?: { sub?: string; username?: string; role?: string; email?: string } }).__DSH_SSO__
+    : undefined
+  const ssoLabel = sso?.username
+    ? `${sso.username} · ${(sso.role ?? 'user').replace(/^[a-z]/, c => c.toUpperCase())}`
+    : undefined
   const [signInNotice, setSignInNotice] = useState(0)
   useEffect(() => subscribeModelSignInRequired?.(() => { setSignInNotice(value => value + 1) }), [subscribeModelSignInRequired])
   const [expiryNotice, setExpiryNotice] = useState(false)
@@ -69,21 +76,23 @@ export function AccountMenu({
             <AccountAvatar avatar={account.avatar} avatarFailed={avatarFailed} />
           </span>
           : <IconEllipsisOutlineMedium size={14} />}
-        {wide && <span className={css.label}>{signedIn ? label : t('more')}</span>}
+        {wide && <span className={css.label}>{signedIn ? label : (sso?.username ?? t('more'))}</span>}
       </button>}
       items={[
         { id: 'settings', label: t('settings'), icon: <IconSettingsOutlineMedium size={16} />,
           ...(settingsShortcut === undefined ? {} : { shortcut: settingsShortcut }) },
         { id: 'contact', label: t('contactUs'), icon: <IconPaperPlaneOutlineMedium size={16} /> },
         ...(signedIn ? [{ id: 'signout', label: t('signOut'), icon: <LogoutIcon />, disabled: busy }]
-          : [{ id: 'signin', label: t('signIn'), icon: <IconUserOutlineMedium size={16} /> }]),
+          : ssoLabel
+            ? [{ id: 'sso-identity', label: ssoLabel, icon: <IconUserOutlineMedium size={16} />, disabled: true }]
+            : [{ id: 'signin', label: t('signIn'), icon: <IconUserOutlineMedium size={16} /> }]),
       ]}
       onClose={() => { setOpen(false) }}
       onSelect={(id) => {
         if (id === 'settings') { setOpen(false); trigger.current?.focus(); openSettings() }
         else if (id === 'contact') { setOpen(false); contactUs() }
         else if (id === 'signin') beginSignIn()
-        else void requestSignOut()
+        else if (id !== 'sso-identity') void requestSignOut()
       }} />
     {account.loginVisible && !account.onboarding && <SignInDialog account={account} colorScheme={colorScheme}
       start={start} cancel={cancel} t={t}
